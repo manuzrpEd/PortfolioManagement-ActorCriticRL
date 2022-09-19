@@ -1,6 +1,6 @@
 # ActorCriticRL_PortfolioManagement
 
-## [DDPG](https://spinningup.openai.com/en/latest/algorithms/ddpg.html) (Deep Deterministic Policy Gradient)
+## [DDPG](https://spinningup.openai.com/en/latest/algorithms/ddpg.html) ([Deep Deterministic Policy Gradient](https://keras.io/examples/rl/ddpg_pendulum/))
 
 Learns: Q-function and a policy.
 
