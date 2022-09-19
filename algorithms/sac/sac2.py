@@ -21,7 +21,7 @@ from torch.multiprocessing import Pipe, Lock
 class SAC:
     def __init__(self, load=False, q_lr=3e-4, p_lr=3e-4, log_std_min=-20, log_std_max=2,
                  gamma=0.99, max_size=1000000, tau=0.005, batch_size=100,
-                 layer1_size=256, layer2_size=256, device='cpu', state_type='only prices', eval_episodes=10,
+                 layer1_size=256, layer2_size=256, device='cpu', state_type='only prices', eval_episodes=1,
                  djia_year=2019, reward_scale=1, repeat=0, figure_dir='plots/sac', checkpoint_dir='checkpoints/sac'):
         self.env = PortfolioEnv(action_scale=1000, state_type=state_type, djia_year=djia_year)
         if djia_year == 2019:
@@ -80,7 +80,7 @@ class SAC:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
         if load:
-            self.agent.load_models(self.checkpoint_dir)
+            self.actor_net.load_state_dict(T.load(self.checkpoint_dir + f'/actor_net_{round}_{epoch}.pt'))
 
         np.random.seed(0)
 
@@ -88,48 +88,50 @@ class SAC:
     def learn(self, round):
         global_timesteps = 0
         max_wealth = 0
+        validation_history = []
         # before the official training, do the initial exploration to add episodes into the replay buffer
         self._initial_exploration(exploration_policy='gaussian')
         # reset the environment
         obs = self.env.reset(*self.intervals['training'])
         # epochs
         for epoch in range(300):
-            # loops per epoch
-            for _ in range(1):
-                # length of each epoch
-                for t in range(self.batch_size):
-                    # start to collect samples
-                    with T.no_grad():
-                        obs_tensor = self._get_tensor_inputs(obs)
-                        pi = self.actor_net(obs_tensor)
-                        action = get_action_info(pi, cuda=self.device=='cuda').select_actions(reparameterize=False)
-                        action = action.cpu().numpy()[0]
-                    # input the actions into the environment
-                    obs_, reward, done, info, wealth = self.env.step(self.action_max * action)
-                    # store the samples
-                    self.buffer.add(obs, action, reward, obs_, float(done))
-                    # reassign the observations
-                    obs = obs_
-                    if done:
-                        # reset the environment
-                        obs = self.env.reset(*self.intervals['training'])
-                # after collect the samples, start to update the network
-                for _ in range(100):
-                    qf1_loss, qf2_loss, actor_loss, alpha, alpha_loss = self._update_network()
-                    # update the target network
-                    if global_timesteps % 1 == 0:
-                        self._update_target_network(self.target_qf1, self.qf1)
-                        self._update_target_network(self.target_qf2, self.qf2)
-                    global_timesteps += 1
+            # length of each epoch
+            # for t in range(self.batch_size):
+            #     print(t)
+                # start to collect samples
+            with T.no_grad():
+                obs_tensor = self._get_tensor_inputs(obs)
+                pi = self.actor_net(obs_tensor)
+                action = get_action_info(pi, cuda=self.device=='cuda').select_actions(reparameterize=False)
+                action = action.cpu().numpy()[0]
+            # input the actions into the environment
+            obs_, reward, done, info, wealth = self.env.step(action)#self.action_max *
+            # store the samples
+            self.buffer.add(obs, action, reward, obs_, float(done))
+            # reassign the observations
+            obs = obs_
+            if done:
+                # reset the environment
+                obs = self.env.reset(*self.intervals['training'])
+                break
+            # after collect the samples, start to update the network
+            for _ in range(100):
+                qf1_loss, qf2_loss, actor_loss, alpha, alpha_loss = self._update_network()
+                # update the target network
+                if global_timesteps % 1 == 0:
+                    self._update_target_network(self.target_qf1, self.qf1)
+                    self._update_target_network(self.target_qf2, self.qf2)
+                global_timesteps += 1
             # print the log information
-            if epoch % 1 == 0:
+            if epoch % 5 == 0:
                 # start to do the evaluation
                 validation_wealth = self._evaluate_agent()
-                print('[{}] Epoch: {}, Rewards: {:,.2f}, QF1: {:,.2f}, QF2: {:,.2f}, AL: {:,.2f}, Alpha: {:,.5f}, AlphaL: {:,.2f}'.format(
+                validation_history.append(validation_wealth - 1000000)
+                print('\n{} Epoch: {}, Wealth: {:,.0f} QF1: {:,.2f}, QF2: {:,.2f}, AL: {:,.2f}, Alpha: {:,.5f}, AlphaL: {:,.2f}'.format(
                         datetime.now(), epoch, validation_wealth, qf1_loss, qf2_loss, actor_loss, alpha, alpha_loss))
                 # save model if validation is creating new max wealth
                 if validation_wealth > max_wealth:
-                    T.save(self.actor_net.state_dict(), self.checkpoint_dir + f'/model_{round}_{epoch}.pt')
+                    T.save(self.actor_net.state_dict(), self.checkpoint_dir + f'/actor_net_{round}_{epoch}.pt')
                     # self.agent.save_models(round, saved_iter, self.checkpoint_dir)
                 max_wealth = max(max_wealth, validation_wealth)
                 # stop training if on validation period the last 5 iterations did not create a new maximum
@@ -239,13 +241,13 @@ class SAC:
                     action = get_action_info(pi, cuda=self.device=='cuda').select_actions(exploration=False, reparameterize=False)
                     action = action.detach().cpu().numpy()[0]
                 # input the action into the environment
-                obs_, reward, done, info, wealth = self.env.step(self.action_max * action)#action only?
+                obs_, reward, done, info, wealth = self.env.step(action)#action only? self.action_max *
                 episode_reward += reward
                 if done:
                     break
                 obs = obs_
             total_reward += episode_reward
-        return total_reward / self.eval_episodes
+        return wealth #total_reward / self.eval_episodes
 
     # backtest the agent
     def test(self):
