@@ -8,7 +8,6 @@ from pyfolio import timeseries
 
 # the flatten mlp
 class flatten_mlp(nn.Module):
-    #TODO: add the initialization method for it
     def __init__(self, input_dims, hidden_size, action_dims=None):
         super(flatten_mlp, self).__init__()
         self.fc1 = nn.Linear(input_dims, hidden_size) if action_dims is None else nn.Linear(input_dims + action_dims, hidden_size)
@@ -23,7 +22,6 @@ class flatten_mlp(nn.Module):
         return output
 
 # define the policy network - tanh gaussian policy network
-# TODO: Not use the log std
 class tanh_gaussian_actor(nn.Module):
     def __init__(self, input_dims, action_dims, hidden_size, log_std_min, log_std_max):
         super(tanh_gaussian_actor, self).__init__()
@@ -136,7 +134,7 @@ class SAC:
                         obs = self.env.reset()
                 # after collect the samples, start to update the network
                 for _ in range(100):
-                    qf1_loss, qf2_loss, actor_loss, alpha, alpha_loss = self._update_newtork()
+                    qf1_loss, qf2_loss, actor_loss, alpha, alpha_loss = self._update_network()
                     # update the target network
                     if global_timesteps % 1 == 0:
                         self._update_target_network(self.target_qf1, self.qf1)
@@ -189,7 +187,7 @@ class SAC:
         return obs_tensor
 
     # update the network
-    def _update_newtork(self):
+    def _update_network(self):
         # smaple batch of samples from the replay buffer
         obses, actions, rewards, obses_, dones = self.buffer.sample(self.batch_size)
         # preprocessing the data into the tensors, will support GPU later
@@ -200,7 +198,7 @@ class SAC:
         inverse_dones = torch.tensor(1 - dones, dtype=torch.float32, device=device).unsqueeze(-1)
         # start to update the actor network
         pis = self.actor_net(obses)
-        actions_info = get_action_info(pis, cuda=self.args.cuda)
+        actions_info = get_action_info(pis, device=device)
         actions_, pre_tanh_value = actions_info.select_actions(reparameterize=True)
         log_prob = actions_info.get_log_prob(actions_, pre_tanh_value)
         # use the automatically tuning
