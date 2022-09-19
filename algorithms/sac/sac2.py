@@ -6,52 +6,25 @@ import os
 import pandas as pd
 from pyfolio import timeseries
 
-# the flatten mlp
-class flatten_mlp(nn.Module):
-    def __init__(self, input_dims, hidden_size, action_dims=None):
-        super(flatten_mlp, self).__init__()
-        self.fc1 = nn.Linear(input_dims, hidden_size) if action_dims is None else nn.Linear(input_dims + action_dims, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.q_value = nn.Linear(hidden_size, 1)
-
-    def forward(self, obs, action=None):
-        inputs = T.cat([obs, action], dim=1) if action is not None else obs
-        x = F.relu(self.fc1(inputs))
-        x = F.relu(self.fc2(x))
-        output = self.q_value(x)
-        return output
-
-# define the policy network - tanh gaussian policy network
-class tanh_gaussian_actor(nn.Module):
-    def __init__(self, input_dims, action_dims, hidden_size, log_std_min, log_std_max):
-        super(tanh_gaussian_actor, self).__init__()
-        self.fc1 = nn.Linear(input_dims, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.mean = nn.Linear(hidden_size, action_dims)
-        self.log_std = nn.Linear(hidden_size, action_dims)
-        # the log_std_min and log_std_max
-        self.log_std_min = log_std_min
-        self.log_std_max = log_std_max
-
-    def forward(self, obs):
-        x = F.relu(self.fc1(obs))
-        x = F.relu(self.fc2(x))
-        mean = self.mean(x)
-        log_std = self.log_std(x)
-        # clamp the log std
-        log_std = T.clamp(log_std, min=self.log_std_min, max=self.log_std_max)
-        # the reparameterization trick
-        # return mean and std
-        return (mean, torch.exp(log_std))
-
 # init, train, validate, test
 # https://github.services.devops.takamol.support/TianhongDai/reinforcement-learning-algorithms/blob/master/rl_algorithms/sac/sac_agent.py
 class SAC:
-    def __init__(self, load=False, q_lr=3e-4, p_lr=3e-4,
+    def __init__(self, load=False, q_lr=3e-4, p_lr=3e-4, log_std_min=-20, log_std_max=2,
                  gamma=0.99, max_size=1000000, tau=0.005, batch_size=100,
-                 layer1_size=256, layer2_size=256, cuda='cuda',
-                 state_type='only prices', djia_year=2019, reward_scale=1, repeat=0):
-
+                 layer1_size=256, layer2_size=256, device='cuda', state_type='only prices', eval_episodes=10,
+                 djia_year=2019, reward_scale=1, repeat=0, figure_dir='plots/sac', checkpoint_dir='checkpoints/sac'):
+        self.max_size = max_size
+        self.eval_episodes = eval_episodes
+        self.gamma = gamma
+        self.tau = tau
+        self.q_lr = q_lr
+        self.p_lr = p_lr
+        self.layer1_size = layer1_size
+        self.layer2_size = layer2_size
+        self.repeat = repeat  # iteration
+        self.batch_size = batch_size
+        self.device = device
+        self.reward_scale = reward_scale
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
         # build up the network that will be used.
@@ -61,36 +34,34 @@ class SAC:
         self.target_qf1 = copy.deepcopy(self.qf1)
         self.target_qf2 = copy.deepcopy(self.qf2)
         # build up the policy network
-        self.actor_net = tanh_gaussian_actor(self.env.state_shape()[0], self.env.action_shape()[0], layer1_size, log_std_min, log_std_max)
+        self.actor_net = tanh_gaussian_actor(self.env.state_shape()[0], self.env.action_shape()[0],
+                                             self.layer1_size, self.log_std_min, self.log_std_max)
         # define the optimizer for them
-        self.qf1_optim = T.optim.Adam(self.qf1.parameters(), lr=q_lr)
-        self.qf2_optim = T.optim.Adam(self.qf2.parameters(), lr=q_lr)
+        self.qf1_optim = T.optim.Adam(self.qf1.parameters(), lr=self.q_lr)
+        self.qf2_optim = T.optim.Adam(self.qf2.parameters(), lr=self.q_lr)
         # the optimizer for the policy network
-        self.actor_optim = T.optim.Adam(self.actor_net.parameters(), lr=p_lr)
+        self.actor_optim = T.optim.Adam(self.actor_net.parameters(), lr=self.p_lr)
         # entropy target
         self.target_entropy = -np.prod(self.env.state_shape()).item()
-        self.log_alpha = T.zeros(1, requires_grad=True, device=device)
+        self.log_alpha = T.zeros(1, requires_grad=True, device=self.device)
         # define the optimizer
-        self.alpha_optim = T.optim.Adam([self.log_alpha], lr=p_lr)
+        self.alpha_optim = T.optim.Adam([self.log_alpha], lr=self.p_lr)
         # define the replay buffer
-        self.buffer = replay_buffer(max_size)
+        self.buffer = replay_buffer(self.max_size)
         # get the action max
         self.action_max = self.env.action_space.high[0]  # 2 or 2000?
         # if use cuda, put tensor onto the gpu
-        if device == 'cuda':
+        if self.device == 'cuda':
             self.actor_net.cuda()
             self.qf1.cuda()
             self.qf2.cuda()
             self.target_qf1.cuda()
             self.target_qf2.cuda()
 
-        self.figure_dir = 'plots/sac'
-        self.checkpoint_dir = 'checkpoints/sac'
+        self.figure_dir = figure_dir
+        self.checkpoint_dir = checkpoint_dir
         os.makedirs(self.figure_dir, exist_ok=True)
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.repeat = repeat # iteration
-        self.batch_size = batch_size
-        self.device = cuda
 
         self.env = PortfolioEnv(action_scale=1000, state_type=state_type, djia_year=djia_year)
         if djia_year == 2019:
@@ -121,7 +92,7 @@ class SAC:
                     with T.no_grad():
                         obs_tensor = self._get_tensor_inputs(obs)
                         pi = self.actor_net(obs_tensor)
-                        action = get_action_info(pi, cuda=self.device).select_actions(reparameterize=False)
+                        action = get_action_info(pi, device=self.device).select_actions(reparameterize=False)
                         action = action.cpu().numpy()[0]
                     # input the actions into the environment
                     obs_, reward, done, _ = self.env.step(self.action_max * action)
@@ -131,7 +102,7 @@ class SAC:
                     obs = obs_
                     if done:
                         # reset the environment
-                        obs = self.env.reset()
+                        obs = self.env.reset(*self.intervals['training'])
                 # after collect the samples, start to update the network
                 for _ in range(100):
                     qf1_loss, qf2_loss, actor_loss, alpha, alpha_loss = self._update_network()
@@ -178,7 +149,7 @@ class SAC:
                 obs = obs_
                 if done:
                     # if done, reset the environment
-                    obs = self.env.reset()
+                    obs = self.env.reset(*self.intervals['training'])
         print("Initial exploration has finished!")
 
     # get tensors
@@ -216,12 +187,12 @@ class SAC:
         q2_value = self.qf2(obses, actions)
         with T.no_grad():
             pis_next = self.actor_net(obses_)
-            actions_info_next = get_action_info(pis_next, cuda=self.args.cuda)
+            actions_info_next = get_action_info(pis_next, device=self.device)
             actions_next_, pre_tanh_value_next = actions_info_next.select_actions(reparameterize=True)
             log_prob_next = actions_info_next.get_log_prob(actions_next_, pre_tanh_value_next)
             target_q_value_next = torch.min(self.target_qf1(obses_, actions_next_),
                                             self.target_qf2(obses_, actions_next_)) - alpha * log_prob_next
-            target_q_value = self.args.reward_scale * rewards + inverse_dones * self.args.gamma * target_q_value_next
+            target_q_value = self.reward_scale * rewards + inverse_dones * self.gamma * target_q_value_next
         qf1_loss = (q1_value - target_q_value).pow(2).mean()
         qf2_loss = (q2_value - target_q_value).pow(2).mean()
         # qf1
@@ -238,102 +209,66 @@ class SAC:
         self.actor_optim.step()
         return qf1_loss.item(), qf2_loss.item(), actor_loss.item(), alpha.item(), alpha_loss.item()
 
-    def train(self, round, verbose=False):
-        training_history = []
-        validation_history = []
-        iteration = 1
-        max_wealth = 0
+    # update the target network
+    def _update_target_network(self, target, source):
+        for target_param, param in zip(target.parameters(), source.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        while True:
-            observation = self.env.reset(*self.intervals['training'])
-            done = False
-            while not done:
-                action = self.agent.choose_action(observation)
-                observation_, reward, done, info, wealth = self.env.step(action)
-                self.agent.remember(observation, action, reward, observation_, int(done))
-                self.agent.learn()
-                observation = observation_
-                if verbose:
-                    print(f"SAC training - Date: {info.date()},\tBalance: {int(self.env.get_balance())},\t"
-                          f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
-            # self.agent.memory.clear_buffer()
+    # evaluate the agent
+    def _evaluate_agent(self):
+        total_reward = 0
+        for _ in range(self.eval_episodes):
+            obs = self.env.reset(*self.intervals['validation'])
+            episode_reward = 0
+            while True:
+                with torch.no_grad():
+                    obs_tensor = self._get_tensor_inputs(obs)
+                    pi = self.actor_net(obs_tensor)
+                    action = get_action_info(pi, device=device).select_actions(exploration=False, reparameterize=False)
+                    action = action.detach().cpu().numpy()[0]
+                # input the action into the environment
+                obs_, reward, done, _ = self.eval_env.step(self.action_max * action)
+                episode_reward += reward
+                if done:
+                    break
+                obs = obs_
+            total_reward += episode_reward
+        return total_reward / self.eval_episodes
 
-            print(f"SAC training - Iteration: {iteration},\tCumulative Return: {int(wealth) - 1000000 :,}")
-            training_history.append(wealth - 1000000)
+# the flatten mlp
+class flatten_mlp(nn.Module):
+    def __init__(self, input_dims, hidden_size, action_dims=None):
+        super(flatten_mlp, self).__init__()
+        self.fc1 = nn.Linear(input_dims, hidden_size) if action_dims is None else nn.Linear(input_dims + action_dims, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.q_value = nn.Linear(hidden_size, 1)
 
-            validation_wealth = self.validate(verbose)
-            print(
-                f"SAC validating - Iteration: {iteration},\tCumulative Return: {int(validation_wealth) - 1000000 :,}")
-            validation_history.append(validation_wealth - 1000000)
-            # save model if validation is creating new max wealth
-            if validation_wealth > max_wealth:
-                saved_iter = iteration
-                self.agent.save_models(round, saved_iter, self.checkpoint_dir)
-            max_wealth = max(max_wealth, validation_wealth)
-            # stop training if on validation period the last 5 iterations did not create a new maximum
-            if validation_history[-5:].count(max_wealth - 1000000) != 1:
-                break
-            # stop training if iteration is equal to some number
-            if iteration == 100:
-                break
-            iteration += 1
+    def forward(self, obs, action=None):
+        inputs = T.cat([obs, action], dim=1) if action is not None else obs
+        x = F.relu(self.fc1(inputs))
+        x = F.relu(self.fc2(x))
+        output = self.q_value(x)
+        return output
 
-        self.agent.load_models(round, saved_iter, self.checkpoint_dir)
+# define the policy network - tanh gaussian policy network
+class tanh_gaussian_actor(nn.Module):
+    def __init__(self, input_dims, action_dims, hidden_size, log_std_min, log_std_max):
+        super(tanh_gaussian_actor, self).__init__()
+        self.fc1 = nn.Linear(input_dims, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.mean = nn.Linear(hidden_size, action_dims)
+        self.log_std = nn.Linear(hidden_size, action_dims)
+        # the log_std_min and log_std_max
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
 
-        buy_hold_history = self.env.buy_hold_history(*self.intervals['training'])
-        buy_hold_final = (buy_hold_history[-1] / buy_hold_history[0] - 1) * 1000000
-        add_hline(buy_hold_final, 'Buy&Hold')
-        add_curve(training_history, 'SAC')
-        save_plot(filename=self.figure_dir + f'/{self.repeat}0_training.png',
-                  title=f"Training - {self.intervals['training'][0].date()} to {self.intervals['training'][1].date()}",
-                  x_label='Iteration', y_label='Cumulative Return (Dollars)')
-
-        buy_hold_history = self.env.buy_hold_history(*self.intervals['validation'])
-        buy_hold_final = (buy_hold_history[-1] / buy_hold_history[0] - 1) * 1000000
-        add_hline(buy_hold_final, 'Buy&Hold')
-        add_curve(validation_history, 'SAC')
-        save_plot(filename=self.figure_dir + f'/{self.repeat}1_validation.png',
-                  title=f"Validation - {self.intervals['validation'][0].date()} to {self.intervals['validation'][1].date()}",
-                  x_label='Iteration', y_label='Cumulative Return (Dollars)')
-
-    def validate(self, verbose=False):
-        observation = self.env.reset(*self.intervals['validation'])
-        done = False
-        while not done:
-            action = self.agent.choose_action(observation)
-            observation_, reward, done, info, wealth = self.env.step(action)
-            observation = observation_
-            if verbose:
-                print(f"SAC validation - Date: {info.date()},\tBalance: {int(self.env.get_balance()) :,},\t"
-                      f"Cumulative Return: {int(wealth) - 1000000 :,},\tShares: {self.env.get_shares()}")
-        return wealth
-
-    def test(self, verbose=False):
-        return_history = [0]
-        buy_hold_history = self.env.buy_hold_history(*self.intervals['testing'])
-        add_curve((buy_hold_history / buy_hold_history[0] - 1) * 1000000, 'Buy&Hold')
-
-        observation = self.env.reset(*self.intervals['testing'])
-        wealth_history = [self.env.get_wealth()]
-        done = False
-        while not done:
-            action = self.agent.choose_action(observation)
-            observation_, reward, done, info, wealth = self.env.step(action)
-            self.agent.remember(observation, action, reward, observation_, int(done))
-            self.agent.learn()
-            observation = observation_
-            if verbose:
-                print(f"SAC testing - Date: {info.date()},\tBalance: {int(self.env.get_balance()) :,},\t"
-                      f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
-            return_history.append(wealth - 1000000)
-            wealth_history.append(wealth)
-        # self.agent.memory.clear_buffer()
-
-        add_curve(return_history, 'SAC')
-        save_plot(self.figure_dir + f'/{self.repeat}2_testing.png',
-                  title=f"Testing - {self.intervals['testing'][0].date()} to {self.intervals['testing'][1].date()}",
-                  x_label='Days', y_label='Cumulative Return (Dollars)')
-
-        returns = pd.Series(wealth_history, buy_hold_history.index).pct_change().dropna()
-        stats = timeseries.perf_stats(returns)
-        stats.to_csv(self.figure_dir + f'/{self.repeat}3_perf.csv')
+    def forward(self, obs):
+        x = F.relu(self.fc1(obs))
+        x = F.relu(self.fc2(x))
+        mean = self.mean(x)
+        log_std = self.log_std(x)
+        # clamp the log std
+        log_std = T.clamp(log_std, min=self.log_std_min, max=self.log_std_max)
+        # the reparameterization trick
+        # return mean and std
+        return (mean, torch.exp(log_std))
