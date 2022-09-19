@@ -35,7 +35,7 @@ def main():
 
         if not os.path.isfile(f'plots/sac/{i}2_testing.png'):
             sac = SAC(state_type='indicators', djia_year=2019, repeat=i)
-            sac.train(i)
+            sac.learn(i)
             sac.test()
 
 
