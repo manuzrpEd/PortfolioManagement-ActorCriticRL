@@ -68,7 +68,7 @@ Note that the Q-function parameters are treated as constants here.
 
 ### Pseudocode
 
-![alt text](https://github.com/manuzrpEd/ActorCriticRL_PortfolioManagement/blob/main/imgs/DDPG.svg)
+![alt text](https://github.com/manuzrpEd/PortfolioManagement-ActorCriticRL/blob/main/imgs/DDPG.svg)
 
 
 ## [PPO](https://spinningup.openai.com/en/latest/algorithms/ppo.html) (Proximal Policy Optimization)
@@ -114,7 +114,7 @@ is called the *advantage*.
 
 ### Pseudocode
 
-![alt text](https://github.com/manuzrpEd/ActorCriticRL_PortfolioManagement/blob/main/imgs/PPO.svg)
+![alt text](https://github.com/manuzrpEd/PortfolioManagement-ActorCriticRL/blob/main/imgs/PPO.svg)
 
 ## [A2C](https://adventuresinmachinelearning.com/a2c-advantage-actor-critic-tensorflow-2/) (Advantage Actor-Critic)
 
@@ -143,7 +143,7 @@ The total loss function for the A2C algorithm is: ``Loss = Actor Loss + Critic L
 
 ### Pseudocode
 
-![alt text](https://github.com/manuzrpEd/ActorCriticRL_PortfolioManagement/blob/main/imgs/A2C.png)
+![alt text](https://github.com/manuzrpEd/PortfolioManagement-ActorCriticRL/blob/main/imgs/A2C.png)
 
 ## [SAC](https://spinningup.openai.com/en/latest/algorithms/sac.html) (Soft Actor-Critic)
 
@@ -199,10 +199,10 @@ $$
 The policy is thus optimized according to
 
 $$
-\max_{\theta} \underset{s \sim \mathcal{D} \\ \xi \sim \mathcal{N}}{E}{\min_{j=1,2} Q_{\phi_j}(s,\tilde{a}_{\theta}(s,\xi)) - \alpha \log \pi_{\theta}(\tilde{a}_{\theta}(s,\xi)|s)},
+\max_{\theta} \underset{s \sim \mathcal{D} \\ \xi \sim \mathcal{N}}{E}{\min_{j=1,2} Q_{\phi_j}(s,\tilde{a_{\theta}}(s,\xi)) - \alpha \log \pi_{\theta}(\tilde{a_{\theta}}(s,\xi)|s)},
 $$
 
 
 ### Pseudocode
 
-![alt text](https://github.com/manuzrpEd/ActorCriticRL_PortfolioManagement/blob/main/imgs/SAC.svg)
+![alt text](https://github.com/manuzrpEd/PortfolioManagement-ActorCriticRL/blob/main/imgs/SAC.svg)
