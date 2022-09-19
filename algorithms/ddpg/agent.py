@@ -205,8 +205,7 @@ class Agent(object):
         self.actor.eval()
         observation = T.tensor(observation, dtype=T.float).to(self.actor.device)
         mu = self.actor.forward(observation)
-        mu = mu + T.tensor(self.noise(),
-                                dtype=T.float).to(self.actor.device)
+        mu = mu + T.tensor(self.noise(), dtype=T.float).to(self.actor.device)
         self.actor.train()
         return mu.detach().cpu().numpy()
 

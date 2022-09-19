@@ -2,13 +2,13 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from algorithms.ddpg.ddpg import DDPG
-from algorithms.a2c.a2c import A2C
 from algorithms.ppo.ppo import PPO
+from algorithms.a2c.a2c import A2C
+from algorithms.sac.sac2 import SAC
 import plot
 import torch.multiprocessing as mp
 import os
 
-# takes at least 3 days as it is
 def main():
     plot.initialize()
     # memory for training of processes only
@@ -33,13 +33,11 @@ def main():
             a2c.train(i)
             a2c.test()
 
-        # SAC
-        '''
-        https://spinningup.openai.com/en/latest/algorithms/sac.html
-        https://github.com/ku2482/soft-actor-critic.pytorch
-        https://github.com/pranz24/pytorch-soft-actor-critic
-        https://towardsdatascience.com/soft-actor-critic-demystified-b8427df61665
-        '''
+        if not os.path.isfile(f'plots/sac/{i}2_testing.png'):
+            sac = SAC(state_type='indicators', djia_year=2019, repeat=i)
+            sac.train(i)
+            sac.test()
+
 
 if __name__ == '__main__':
     main()
