@@ -4,14 +4,13 @@ warnings.filterwarnings('ignore')
 from algorithms.ddpg.ddpg import DDPG
 from algorithms.ppo.ppo import PPO
 from algorithms.a2c.a2c import A2C
-from algorithms.sac.sac2 import SAC
+from algorithms.sac.sac import SAC
 import plot
 import torch.multiprocessing as mp
 import os
 
 def main():
     plot.initialize()
-    # memory for training of processes only
     mp.set_start_method('spawn')
 
     for i in range(50):
@@ -35,7 +34,7 @@ def main():
 
         if not os.path.isfile(f'plots/sac/{i}2_testing.png'):
             sac = SAC(state_type='indicators', djia_year=2019, repeat=i)
-            sac.learn(i)
+            sac.train(i)
             sac.test()
 
 

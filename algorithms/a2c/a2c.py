@@ -1,10 +1,12 @@
-from env.environment import PortfolioEnv
-from algorithms.a2c.agent import ActorCritic, Agent
-from torch.multiprocessing import Pipe, Lock
-from plot import add_curve, add_hline, save_plot
 import os
+#
 import pandas as pd
+#
+from algorithms.a2c.agent import ActorCritic, Agent
+from env.environment import PortfolioEnv
+from plot import add_curve, add_hline, save_plot
 from pyfolio import timeseries
+from torch.multiprocessing import Pipe, Lock
 
 # init, train, validate, test
 class A2C:
@@ -31,7 +33,6 @@ class A2C:
                                    gamma=gamma, fc1_dims=layer1_size, fc2_dims=layer2_size, lr=alpha, entropy=entropy)
         self.network.share_memory()
         self.network.train()
-        
         if load:
             self.network.load_checkpoint(self.checkpoint_dir)
 
@@ -120,10 +121,10 @@ class A2C:
         return_history = [0]
         buy_hold_history = self.env.buy_hold_history(*self.intervals['testing'])
         add_curve((buy_hold_history / buy_hold_history[0] - 1) * 1000000, 'Buy&Hold')
-
         done = False
         observation = self.env.reset(*self.intervals['testing'])
         wealth_history = [self.env.get_wealth()]
+
         t_step = 0
         while not done:
             action = self.network.choose_action(observation)

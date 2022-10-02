@@ -1,32 +1,36 @@
-from env.environment import PortfolioEnv
-from algorithms.sac.agent import Agent, ActorNetwork, ValueNetwork, CriticNetwork
-from torch.multiprocessing import Pipe, Lock
-from plot import add_curve, add_hline, save_plot
 import os
+#
 import pandas as pd
+#
+from algorithms.sac.agent import Agent, ActorNetwork, CriticNetwork, ValueNetwork, ReplayBuffer#, LinearVAE, ActorNetwork_2
+from env.environment import PortfolioEnv
+from plot import add_curve, add_hline, save_plot
 from pyfolio import timeseries
 
 # init, train, validate, test
 class SAC:
-    def __init__(self, load=False, alpha=0.001, beta=0.001,
-                 gamma=0.99, max_size=1000000, tau=0.005, batch_size=100,
-                 layer1_size=256, layer2_size=256, cuda_index=0,
+    def __init__(self, load=False, alpha=0.0001, beta=0.0001, gamma=0.99, tau=0.005,
+                 max_size=1000000, reward_scale=2,
+                 batch_size=64, layer1_size=1024, layer2_size=1024, t_max=256,
                  state_type='only prices', djia_year=2019, repeat=0):
 
         self.figure_dir = 'plots/sac'
         self.checkpoint_dir = 'checkpoints/sac'
         os.makedirs(self.figure_dir, exist_ok=True)
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.repeat = repeat  # iteration
+        self.t_max = t_max
+        self.repeat = repeat
 
         self.env = PortfolioEnv(action_scale=1000, state_type=state_type, djia_year=djia_year)
         if djia_year == 2019:
             self.intervals = self.env.get_intervals(train_ratio=0.7, valid_ratio=0.15, test_ratio=0.15)
         elif djia_year == 2012:
             self.intervals = self.env.get_intervals(train_ratio=0.9, valid_ratio=0.05, test_ratio=0.05)
-        self.agent = Agent(input_dims=self.env.state_shape(), n_actions=self.env.action_shape(), alpha=alpha, beta=beta,
-                 gamma=gamma, max_size=max_size, tau=tau, batch_size=batch_size,
-                 layer1_size=layer1_size, layer2_size=layer2_size, cuda_index=cuda_index)
+        self.agent = Agent(env=self.env, n_actions=self.env.action_shape()[0], input_dims=self.env.state_shape()[0],
+                           alpha=alpha, beta=beta, gamma=gamma, tau=tau,
+                           max_size=max_size, batch_size=batch_size,
+                           fc1_dims=layer1_size, fc2_dims=layer2_size,
+                           reward_scale=reward_scale)
         if load:
             self.agent.load_models(self.checkpoint_dir)
 
@@ -40,33 +44,32 @@ class SAC:
             observation = self.env.reset(*self.intervals['training'])
             done = False
             while not done:
+                #reached
+                # print("sac3 action")
                 action = self.agent.choose_action(observation)
+            #     action, prob, val = self.agent.choose_action(observation)
                 observation_, reward, done, info, wealth = self.env.step(action)
-                self.agent.remember(observation, action, reward, observation_, int(done))
+            #     observation_, reward, done, info, wealth = self.env.step(action)
+                self.agent.remember(observation, action, reward, observation_, done)
+            #     self.agent.remember(observation, action, prob, val, reward, done)
                 self.agent.learn()
                 observation = observation_
                 if verbose:
                     print(f"SAC training - Date: {info.date()},\tBalance: {int(self.env.get_balance())},\t"
-                          f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
-            # self.agent.memory.clear_buffer()
-
+                          f"Cumulative Return: {int(wealth) - 1000000 :,},\tShares: {self.env.get_shares()}")
+            self.agent.memory.clear_buffer()
+            #
             print(f"SAC training - Iteration: {iteration},\tCumulative Return: {int(wealth) - 1000000 :,}")
             training_history.append(wealth - 1000000)
 
             validation_wealth = self.validate(verbose)
-            print(
-                f"SAC validating - Iteration: {iteration},\tCumulative Return: {int(validation_wealth) - 1000000 :,}")
+            print(f"SAC validating - Iteration: {iteration},\tCumulative Return: {int(validation_wealth) - 1000000 :,}")
             validation_history.append(validation_wealth - 1000000)
-            # save model if validation is creating new max wealth
             if validation_wealth > max_wealth:
                 saved_iter = iteration
                 self.agent.save_models(round, saved_iter, self.checkpoint_dir)
             max_wealth = max(max_wealth, validation_wealth)
-            # stop training if on validation period the last 5 iterations did not create a new maximum
             if validation_history[-5:].count(max_wealth - 1000000) != 1:
-                break
-            # stop training if iteration is equal to some number
-            if iteration == 100:
                 break
             iteration += 1
 
@@ -97,7 +100,7 @@ class SAC:
             observation = observation_
             if verbose:
                 print(f"SAC validation - Date: {info.date()},\tBalance: {int(self.env.get_balance()) :,},\t"
-                      f"Cumulative Return: {int(wealth) - 1000000 :,},\tShares: {self.env.get_shares()}")
+                      f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
         return wealth
 
     def test(self, verbose=False):
@@ -111,15 +114,15 @@ class SAC:
         while not done:
             action = self.agent.choose_action(observation)
             observation_, reward, done, info, wealth = self.env.step(action)
-            self.agent.remember(observation, action, reward, observation_, int(done))
+            self.agent.remember(observation, action, reward, observation_, done)
             self.agent.learn()
             observation = observation_
             if verbose:
-                print(f"SAC testing - Date: {info.date()},\tBalance: {int(self.env.get_balance()) :,},\t"
-                      f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
+                print(f"SAC testing - Date: {info.date()},\tBalance: {int(self.env.get_balance())},\t"
+                      f"Cumulative Return: {int(wealth) - 1000000 :,},\tShares: {self.env.get_shares()}")
             return_history.append(wealth - 1000000)
             wealth_history.append(wealth)
-        # self.agent.memory.clear_buffer()
+        self.agent.memory.clear_buffer()
 
         add_curve(return_history, 'SAC')
         save_plot(self.figure_dir + f'/{self.repeat}2_testing.png',

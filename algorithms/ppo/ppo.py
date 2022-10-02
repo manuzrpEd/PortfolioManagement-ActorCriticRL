@@ -1,8 +1,10 @@
-from env.environment import PortfolioEnv
-from algorithms.ppo.agent import Agent
-from plot import add_curve, add_hline, save_plot
 import os
+#
 import pandas as pd
+#
+from algorithms.ppo.agent import Agent
+from env.environment import PortfolioEnv
+from plot import add_curve, add_hline, save_plot
 from pyfolio import timeseries
 
 # init, train, validate, test

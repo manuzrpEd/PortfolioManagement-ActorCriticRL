@@ -11,7 +11,6 @@ from pypfopt import EfficientFrontier, risk_models, expected_returns
 
 plot.initialize()
 
-
 def test(env, weights, name):
     intervals = env.get_intervals()
 

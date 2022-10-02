@@ -59,15 +59,12 @@ class ReplayBuffer(object):
 
     def sample_buffer(self, batch_size):
         max_mem = min(self.mem_cntr, self.mem_size)
-
         batch = np.random.choice(max_mem, batch_size)
-
         states = self.state_memory[batch]
         actions = self.action_memory[batch]
         rewards = self.reward_memory[batch]
         states_ = self.new_state_memory[batch]
         terminal = self.terminal_memory[batch]
-
         return states, actions, rewards, states_, terminal
 
     def clear_buffer(self):
@@ -215,9 +212,7 @@ class Agent(object):
     def learn(self):
         if self.memory.mem_cntr < self.batch_size:
             return
-        state, action, reward, new_state, done = \
-            self.memory.sample_buffer(self.batch_size)
-
+        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
         reward = T.tensor(reward, dtype=T.float).to(self.critic.device)
         done = T.tensor(done).to(self.critic.device)
         new_state = T.tensor(new_state, dtype=T.float).to(self.critic.device)
