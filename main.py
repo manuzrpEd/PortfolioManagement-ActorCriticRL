@@ -14,7 +14,7 @@ def main():
     mp.set_start_method('spawn')
 
     for i in range(50):
-        print(f"---------- round {i} ----------")
+        print(f"\n---------- round {i} ----------")
 
         # this will not overwrite existing rounds
         if not os.path.isfile(f'plots/ddpg/{i}2_testing.png'):
@@ -36,7 +36,6 @@ def main():
             sac = SAC(state_type='indicators', djia_year=2019, repeat=i)
             sac.train(i)
             sac.test()
-
 
 if __name__ == '__main__':
     main()
