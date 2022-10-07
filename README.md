@@ -170,15 +170,15 @@ $$
 With these definitions, $V^{\pi}$ and $Q^{\pi}$ are connected by:
 
 $$
-V^{\pi}(s) = \underset{a \sim \pi}{E}{Q^{\pi}(s,a)} + \alpha H\left(\pi(\cdot|s)\right)
+V^{\pi}(s) = \underset{a \sim \pi}{E}\left[{Q^{\pi}(s,a)} + \alpha H\left(\pi(\cdot|s)\right)\right]
 $$
 
 and the Bellman equation for $Q^{\pi}$ is
 
 $$
 \begin{align*}
-Q^{\pi}(s,a) &= \underset{s' \sim P \\ a' \sim \pi}{E}{R(s,a,s') + \gamma\left(Q^{\pi}(s',a') + \alpha H\left(\pi(\cdot|s')\right) \right)} \\ 
-&= \underset{s' \sim P}{E}{R(s,a,s') + \gamma V^{\pi}(s')}.
+Q^{\pi}(s,a) &= \underset{s' \sim P \\ a' \sim \pi}{E}\left[{R(s,a,s') + \gamma\left(Q^{\pi}(s',a') + \alpha H\left(\pi(\cdot|s')\right) \right)}\right] \\ 
+&= \underset{s' \sim P}{E}\left[{R(s,a,s') + \gamma V^{\pi}(s')}\right].
 \end{align*}
 $$
 
