@@ -35,3 +35,7 @@ settings.ini
 **/__pycache__/**
 **__init__.py/**
 __pycache__/
+
+# folders:
+plots/
+checkpoints/
