@@ -187,7 +187,28 @@
       <option name="project" value="LOCAL" />
       <updated>1665119776512</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="remove plots">
+      <created>1665120270392</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1665120270392</updated>
+    </task>
+    <task id="LOCAL-00014" summary="remove checkpoints">
+      <created>1665120317841</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1665120317841</updated>
+    </task>
+    <task id="LOCAL-00015" summary="remove .idea">
+      <created>1665120432550</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1665120432550</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -205,6 +226,8 @@
     <MESSAGE value="1st attempt to add SAC" />
     <MESSAGE value="2nd attempt to add SAC" />
     <MESSAGE value="adding SAC algorithm to the PortfolioManagement" />
+    <MESSAGE value="remove plots" />
+    <MESSAGE value="remove checkpoints" />
     <MESSAGE value="remove .idea" />
     <option name="LAST_COMMIT_MESSAGE" value="remove .idea" />
   </component>
